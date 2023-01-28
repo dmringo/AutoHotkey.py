@@ -17,7 +17,7 @@ def main():
     os.environ["PYTHONDLL"] = python_dll_path()
 
     ahk_exe_path = fix_ahk_platform(get_ahk_exe_path())
-    python_ahk_path = Path(__file__).parent / "Python.ahk"
+    python_ahk_path = Path(__file__).parent / get_script_for_ahk_ver(ahk_exe_path)
     args = [str(ahk_exe_path), str(python_ahk_path)] + sys.argv[1:]
 
     while True:
@@ -49,6 +49,27 @@ def python_dll_path():
     if not dllpath_len:
         return ""
     return dllpath[:dllpath_len]
+
+def get_ahk_major(ahk_exe):
+    check_ver_path = Path(__file__).parent / "CheckVer.ahk"
+    cmd = [str(ahk_exe), str(check_ver_path)]
+    check = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    check.wait()
+    if check.returncode != 0:
+        sys.exit(ctypes.c_int32(check.returncode))
+    
+    line = check.stdout.read()
+    ver_parts = line.decode().strip().split('.')
+    if len(ver_parts) > 0:
+        return int(ver_parts[0])
+    
+    # Can't detect version: die? raise except? return garbage?
+    return None
+
+def get_script_for_ahk_ver(ahk_exe):
+    if get_ahk_major(ahk_exe) == 2:
+        return "Python_v2.ahk"
+    return "Python.ahk"
 
 
 def get_ahk_exe_path():
@@ -97,6 +118,10 @@ def get_ahk_by_assoc():
 
 
 def fix_ahk_platform(ahk_exe_path):
+    # my install only comes with 
+    if get_ahk_major(ahk_exe_path) == 2:
+        return ahk_exe_path
+
     p = Path(ahk_exe_path)
     if p.name.lower() == "autohotkey.exe":
         # Get the AHK binary of the same architecture as the Python interpreter.
