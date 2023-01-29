@@ -1,8 +1,7 @@
-﻿#NoEnv
-#Warn, All, MsgBox
+﻿#Warn All, MsgBox
 #NoTrayIcon
-SendMode, Input
-SetBatchLines, -1
+SendMode Input
+SetBatchLines -1
 
 global NULL := 0
 global EMPTY_STRING := ""
@@ -44,12 +43,13 @@ Main()
 return
 
 
-#Include, <StdoutToVar_CreateProcess>
-#Include, <PythonDll>
-#Include, <Commands>
+#Include <StdoutToVar_CreateProcess_v2>
+#Include <PythonDll_v2>
+#Include <Commands_v2>
 
 
 Main() {
+
     DllCall("AttachConsole", "Int", -1)
     ; EnvSet command is not respected by C getenv, do it via ucrtbase.
     DllCall("ucrtbase\_putenv_s", "AStr", "PYTHONUNBUFFERED", "AStr", "1", "Int")
@@ -57,21 +57,22 @@ Main() {
     LoadPython()
     PackBuiltinModule()
 
+    global AHKModule_name
     PyImport_AppendInittab(&AHKModule_name, Func("PyInit_ahk"))
     Py_Initialize()
 
-    Py_None := Py_BuildValue("")
+    global Py_None := Py_BuildValue("")
 
-    EnvGet, python_full_path, PYTHONFULLPATH
+    EnvGet python_full_path, PYTHONFULLPATH
     if (python_full_path) {
         PySys_SetPath(python_full_path)
     }
 
     fullCommand := SetArgs()
 
-    DetectHiddenWindows, On
-    WinSetTitle, ahk_id %A_ScriptHwnd%, , % fullCommand " - AutoHotkey v" A_AhkVersion
-    DetectHiddenWindows, Off
+    DetectHiddenWindows On
+    WinSetTitle ahk_id %A_ScriptHwnd%, , fullCommand " - AutoHotkey v" A_AhkVersion
+    DetectHiddenWindows Off
 
     ; Import the higher-level ahk module to bootstrap the excepthook.
     mainModule := PyImport_ImportModule("ahkpy.main")
@@ -82,14 +83,14 @@ Main() {
         End("Cannot load ahk module.")
     }
 
-    Py_AHKError := PyObject_GetAttrString(mainModule, "Error")
+    global Py_AHKError := PyObject_GetAttrString(mainModule, "Error")
     if (Py_AHKError == NULL) {
         Py_DecRef(mainModule)
         PyErr_Print()
         End("Module 'main' has no attribute 'Error'.")
     }
 
-    Py_HandleSystemExit := PyObject_GetAttrString(mainModule, "handle_system_exit")
+    global Py_HandleSystemExit := PyObject_GetAttrString(mainModule, "handle_system_exit")
     if (Py_HandleSystemExit == NULL) {
         Py_DecRef(mainModule)
         PyErr_Print()
@@ -115,7 +116,7 @@ Main() {
     }
     Py_DecRef(result)
 
-    SetTimer, CheckSignals, 100
+    SetTimer CheckSignals, 100
 }
 
 PackBuiltinModule() {
@@ -139,7 +140,7 @@ PackBuiltinModule() {
     ; };
 
     global AHKModule_name := EncodeString("_ahk")
-    global AHKModule
+    global AHKModule, AHKMethods
     Pack(AHKModule
         , "Ptr", 1  ; Py_ssize_t ob_refcnt
         , "Ptr", NULL ; ob_type
@@ -191,7 +192,7 @@ PackBuiltinMethods() {
         , "Ptr", NULL)
 }
 
-Pack(ByRef var, args*) {
+Pack(&var, args*) {
     static typeSizes := {Char: 1, UChar: 1
         , Short: 2, UShort: 2
         , Int: 4 , UInt: 4, Int64: 8
@@ -227,6 +228,7 @@ Pack(ByRef var, args*) {
 }
 
 PyInit_ahk() {
+    global AHKModule
     mod := PyModule_Create2(&AHKModule, PYTHON_API_VERSION)
     if (mod == NULL) {
         return NULL
@@ -268,8 +270,8 @@ HandleCtrlEvent(signal) {
         ; handlers. However, it won't succeed because the GIL will have been
         ; acquired by the main thread. So instead, schedule the exit to be
         ; executed in the main thread.
-        SetTimer, _ExitApp, -1
-        Sleep, 100
+        SetTimer _ExitApp, -1
+        Sleep 100
     }
     ; Let the other handlers do the work.
     return false
@@ -286,7 +288,7 @@ CheckSignals() {
         PyExc_KeyboardInterrupt := CachedProcAddress("PyExc_KeyboardInterrupt", "PtrP")
         if (PyErr_ExceptionMatches(PyExc_KeyboardInterrupt)) {
             PyErr_Print()
-            ExitApp, %STATUS_CONTROL_C_EXIT%
+            ExitApp %STATUS_CONTROL_C_EXIT%
         }
         PyErr_Print()
     } finally {
@@ -467,6 +469,7 @@ AHKToPython(value) {
         }
         return result
     } else if (value == "") {
+        global Py_EmptyString, EMPTY_STRING
         if (Py_EmptyString == NULL) {
             Py_EmptyString := PyUnicode_InternFromString(&EMPTY_STRING)
         }
@@ -586,7 +589,7 @@ PrintErrorOrExit() {
     PyExc_KeyboardInterrupt := CachedProcAddress("PyExc_KeyboardInterrupt", "PtrP")
     if (PyErr_ExceptionMatches(PyExc_KeyboardInterrupt)) {
         PyErr_Print()
-        ExitApp, %STATUS_CONTROL_C_EXIT%
+        ExitApp %STATUS_CONTROL_C_EXIT%
     }
 
     PyExc_SystemExit := CachedProcAddress("PyExc_SystemExit", "PtrP")
@@ -602,7 +605,7 @@ PrintErrorOrExit() {
     if (value == NULL) {
         ; The value and traceback object may be NULL even when the type object
         ; is not.
-        ExitApp, 0
+        ExitApp 0
     }
 
     args := PyTuple_Pack(1, value)
@@ -621,13 +624,13 @@ PrintErrorOrExit() {
 
     exitCode := PythonToAHK(pyExitCode, False)
     Py_DecRef(pyExitCode)
-    ExitApp, %exitCode%
+    ExitApp %exitCode%
 }
 
 End(message) {
     message .= "`nThe application will now exit."
-    MsgBox, % message
-    ExitApp, 1
+    MsgBox message
+    ExitApp 1
 }
 
 GuiClose:
@@ -640,7 +643,7 @@ HandleExit(reason, code, label:="OnExit") {
     ; correctly.
     for menuName, _ in MENUS {
         try {
-            Menu, %menuName%, DeleteAll
+            Menu %menuName%, DeleteAll
         } catch {
             ; Menu might not exist.
             continue
@@ -651,6 +654,6 @@ HandleExit(reason, code, label:="OnExit") {
     HPYTHON_DLL := NULL
     if (err) {
         code := 120
-        ExitApp, %code%
+        ExitApp %code%
     }
 }

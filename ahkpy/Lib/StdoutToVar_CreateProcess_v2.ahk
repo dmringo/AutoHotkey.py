@@ -17,7 +17,7 @@
 ; ..............: Jun. 02, 2014 - Corrected exit code error.
 ; ..............: Nov. 02, 2016 - Fixed blocking behavior due to ReadFile thanks to PeekNamedPipe.
 ; ----------------------------------------------------------------------------------------------------------------------
-StdoutToVar_CreateProcess(sCmd, sEncoding:="CP0", sDir:="", ByRef nExitCode:=0) {
+StdoutToVar_CreateProcess(sCmd, sEncoding:="CP0", sDir:="", &nExitCode:=0) {
     hStdOutRd := 0
     hStdOutWr := 0
     DllCall( "CreatePipe",           PtrP, hStdOutRd, PtrP, hStdOutWr, Ptr,0, UInt,0 )
@@ -32,9 +32,11 @@ StdoutToVar_CreateProcess(sCmd, sEncoding:="CP0", sDir:="", ByRef nExitCode:=0) 
 
     If ( !DllCall( "CreateProcess", Ptr,0, Ptr,&sCmd, Ptr,0, Ptr,0, Int,True, UInt,0x08000000
                                   , Ptr,0, Ptr,sDir?&sDir:0, Ptr,&si, Ptr,&pi ) )
+    { 
+        DllCall( "CloseHandle", Ptr,hStdOutWr )
+        DllCall( "CloseHandle", Ptr,hStdOutRd )
         Return ""
-      , DllCall( "CloseHandle", Ptr,hStdOutWr )
-      , DllCall( "CloseHandle", Ptr,hStdOutRd )
+    }
 
     DllCall( "CloseHandle", Ptr,hStdOutWr ) ; The write pipe must be closed before reading the stdout.
     sOutput := ""
@@ -45,7 +47,7 @@ StdoutToVar_CreateProcess(sCmd, sEncoding:="CP0", sDir:="", ByRef nExitCode:=0) 
             Break
         If ( !nTot )
         { ; If the pipe buffer is empty, sleep and continue checking.
-            Sleep, 100
+            Sleep 100
             Continue
         } ; Pipe buffer is not empty, so we can read it.
         VarSetCapacity(sTemp, nTot+1)

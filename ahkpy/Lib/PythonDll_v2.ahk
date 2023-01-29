@@ -1,7 +1,7 @@
 LoadPython() {
     ; Try loading Python DLL from the path set in the PYTHONDLL environment
     ; variable. The variable is normally set by launcher.py.
-    EnvGet, python_dll, PYTHONDLL
+    EnvGet python_dll, PYTHONDLL
     if (python_dll) {
         HPYTHON_DLL := LoadLibraryEx(python_dll, LOAD_WITH_ALTERED_SEARCH_PATH)
         if (HPYTHON_DLL != NULL) {
@@ -26,7 +26,7 @@ LoadPython() {
 
     ; Try py.exe.
     arch := A_PtrSize * 8
-    cmd := "py.exe -3-" arch " -c ""import os, sys; print(os.path.dirname(sys.executable), end='')"""
+    cmd := "py.exe -3-" arch " -c `"import os, sys; print(os.path.dirname(sys.executable), end='')`""
     pythonDir := StdoutToVar_CreateProcess(cmd)
     exists := FileExist(pythonDir)
     if (pythonDir != "" and FileExist(pythonDir) == "D") {
@@ -37,7 +37,7 @@ LoadPython() {
         }
     }
     if (A_LastError != ERROR_MOD_NOT_FOUND) {
-        End("Cannot load Python DLL: " A_LastError)
+         End("Cannot load Python DLL: " A_LastError)
     }
 
     End("Cannot find Python DLL.")
@@ -232,7 +232,7 @@ PyErr_ExceptionMatches(exc) {
     return PythonDllCall("PyErr_ExceptionMatches", "Ptr", exc, "Cdecl Int")
 }
 
-PyErr_Fetch(ByRef ptype, ByRef pvalue, ByRef ptraceback) {
+PyErr_Fetch(&ptype, &pvalue, &ptraceback) {
     ; PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptraceback)
     PythonDllCall("PyErr_Fetch", "Ptr", &ptype, "Ptr", &pvalue, "Ptr", &ptraceback, "Cdecl")
     ptype := NumGet(ptype)
